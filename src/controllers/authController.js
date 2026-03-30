@@ -29,6 +29,7 @@ const register = async (req, res) => {
 
     res.status(201).json({ message: 'User registered successfully', user: newUser });
   } catch (err) {
+    console.error('Registration Backend Error:', err);
     if (err.code === '23505') {
       return res.status(400).json({ error: 'Username or email already exists' });
     }
@@ -96,6 +97,7 @@ const login = async (req, res) => {
       }
     });
   } catch (err) {
+    console.error('Login Backend Error:', err);
     res.status(500).json({ error: err.message });
   }
 };
