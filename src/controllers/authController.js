@@ -46,8 +46,15 @@ const login = async (req, res) => {
       return res.status(400).json({ error: 'Email and password are required' });
     }
 
-    // Find user
-    const findUserQuery = 'SELECT * FROM public.user_login WHERE email = $1';
+    // Find user with real name from linked faculty or student table
+    const findUserQuery = `
+      SELECT u.*, 
+             COALESCE(f.name, s.name) as display_name
+      FROM public.user_login u
+      LEFT JOIN public.faculty f ON u.faculty_id = f.id
+      LEFT JOIN public.student s ON u.student_id = s.id
+      WHERE u.email = $1
+    `;
     const userResult = await db.query(findUserQuery, [email]);
     const user = userResult.rows[0];
 
@@ -81,10 +88,12 @@ const login = async (req, res) => {
 
     // Generate Token
     const token = jwt.sign(
-      { id: user.id, username: user.username, role_id: user.role_id },
+      { id: user.id, username: user.username, role_id: user.role_id, display_name: user.display_name },
       JWT_SECRET,
       { expiresIn: '24h' }
     );
+
+    console.log(`✅ User logged in successfully: ${user.display_name || user.username} (${user.email}) with role_id: ${user.role_id}`);
 
     res.status(200).json({
       message: 'Login successful',
@@ -92,8 +101,11 @@ const login = async (req, res) => {
       user: {
         id: user.id,
         username: user.username,
+        display_name: user.display_name,
         email: user.email,
-        role_id: user.role_id
+        role_id: user.role_id,
+        student_id: user.student_id,
+        faculty_id: user.faculty_id
       }
     });
   } catch (err) {

@@ -10,6 +10,7 @@ const resultsRoutes = require('./routes/resultsRoutes');
 const curriculumRoutes = require('./routes/curriculumRoutes');
 const authRoutes = require('./routes/authRoutes');
 const roleRoutes = require('./routes/roleRoutes');
+const facultyRoutes = require('./routes/facultyRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -21,6 +22,7 @@ app.use(express.json());
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/roles', roleRoutes);
+app.use('/api/faculty', facultyRoutes);
 app.use('/api/university', universityRoutes);
 app.use('/api/campus', campusRoutes);
 app.use('/api/attendance', attendanceRoutes);
