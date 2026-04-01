@@ -1,0 +1,26 @@
+node_modules
+
+# SQLite (runtime DB + WAL modes)
+db/*.sqlite
+db/*.sqlite-journal
+db/*.sqlite-wal
+db/*.sqlite-shm
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Test / tooling
+coverage
+.nyc_output
+*.tsbuildinfo
+.eslintcache
