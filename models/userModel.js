@@ -30,7 +30,7 @@ async function resetLoginAttempts(email) {
 }
 
 async function updateLastLogin(email) {
-  await run(`UPDATE user_login SET last_login = datetime('now') WHERE email = ?`, [email]);
+  await run(`UPDATE user_login SET last_login = NOW() WHERE email = ?`, [email]);
 }
 
 async function setLockedUntil(email, isoTimestamp) {
@@ -44,7 +44,7 @@ async function updatePasswordHash(email, passwordHash) {
 async function clearExpiredLock(email) {
   await run(
     `UPDATE user_login SET locked_until = NULL
-     WHERE email = ? AND locked_until IS NOT NULL AND datetime(locked_until) <= datetime('now')`,
+     WHERE email = ? AND locked_until IS NOT NULL AND locked_until <= NOW()`,
     [email]
   );
 }

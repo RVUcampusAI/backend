@@ -15,7 +15,7 @@ async function findValidOtp({ email, otp, otpType }) {
        AND otp = ?
        AND otp_type = ?
        AND is_used = 0
-       AND datetime(expires_at) > datetime('now')
+       AND expires_at > NOW()
      ORDER BY id DESC
      LIMIT 1`,
     [email, otp, otpType]

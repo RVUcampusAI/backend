@@ -2,9 +2,14 @@ const jwt = require('jsonwebtoken');
 const { jwtSecret } = require('../config/env');
 const { fail } = require('../utils/apiResponse');
 
+function extractBearerToken(headerValue) {
+  if (!headerValue || typeof headerValue !== 'string') return '';
+  const m = /^Bearer\s+(\S+)/i.exec(headerValue.trim());
+  return m ? m[1].trim() : '';
+}
+
 function requireAuth(req, res, next) {
-  const header = req.headers.authorization || '';
-  const [, token] = header.split(' ');
+  const token = extractBearerToken(req.headers.authorization);
   if (!token) return fail(res, 'Missing Authorization token', 401);
 
   try {

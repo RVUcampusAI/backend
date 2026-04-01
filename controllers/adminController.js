@@ -1,12 +1,24 @@
 const { ok, fail } = require('../utils/apiResponse');
 const academic = require('../models/academicModel');
 const studentModel = require('../models/studentModel');
+const facultyModel = require('../models/facultyModel');
+const attendanceModel = require('../models/attendanceModel');
 const { assertValidCourseOffering } = require('../services/courseOfferingValidation');
 const { validateStudentAffiliation } = require('../services/studentAffiliationValidator');
+const {
+  autoEnrollCoreCourses,
+  validateManualEnrollment,
+} = require('../services/enrollmentService');
 
 const TRACKS = new Set(['core', 'minor', 'major', 'specialization', 'elective']);
 
 function handleDbError(res, e, fallback = 'Operation failed') {
+  if (e && e.code === '23505') {
+    return fail(res, 'Duplicate value violates unique constraint', 409);
+  }
+  if (e && e.code === '23503') {
+    return fail(res, 'Invalid reference or related data prevents this action', 409);
+  }
   if (e && e.message && e.message.includes('UNIQUE')) {
     return fail(res, 'Duplicate value violates unique constraint', 409);
   }
@@ -568,6 +580,113 @@ async function listStudents(req, res) {
   }
 }
 
+async function listFaculty(req, res) {
+  try {
+    const rows = await facultyModel.listFaculty();
+    return ok(res, 'OK', { items: rows });
+  } catch (e) {
+    return handleDbError(res, e, 'Failed to list faculty');
+  }
+}
+
+async function listFacultyMappings(req, res) {
+  try {
+    const rows = await attendanceModel.listFacultyMappingsAdmin();
+    return ok(res, 'OK', { items: rows });
+  } catch (e) {
+    return handleDbError(res, e, 'Failed to list faculty mappings');
+  }
+}
+
+async function createFacultyMapping(req, res) {
+  try {
+    const { course_section_id, faculty_id, role } = req.body || {};
+    if (!course_section_id || !faculty_id || !role) {
+      return fail(res, 'course_section_id, faculty_id, and role are required', 400);
+    }
+    if (!['primary', 'co_faculty'].includes(role)) return fail(res, 'Invalid role', 400);
+    const id = await attendanceModel.createFacultyMapping({
+      courseSectionId: course_section_id,
+      facultyId: faculty_id,
+      role,
+    });
+    if (!id) {
+      const rows = await attendanceModel.listFacultyMappingsAdmin();
+      const existing = rows.find(
+        (r) =>
+          Number(r.course_section_id) === Number(course_section_id) &&
+          Number(r.faculty_id) === Number(faculty_id) &&
+          r.role === role
+      );
+      return ok(res, 'Mapping already exists', { item: existing || {} });
+    }
+    const rows = await attendanceModel.listFacultyMappingsAdmin();
+    const item = rows.find((r) => r.id === id) || { id };
+    return ok(res, 'Faculty mapping created', { item }, 201);
+  } catch (e) {
+    return handleDbError(res, e, 'Failed to create faculty mapping');
+  }
+}
+
+async function deleteFacultyMapping(req, res) {
+  try {
+    const id = Number(req.params.id);
+    await attendanceModel.deleteFacultyMapping(id);
+    return ok(res, 'Mapping deleted', {});
+  } catch (e) {
+    return handleDbError(res, e, 'Failed to delete mapping');
+  }
+}
+
+async function listStudentEnrollments(req, res) {
+  try {
+    const rows = await attendanceModel.listEnrollmentsAdmin();
+    return ok(res, 'OK', { items: rows });
+  } catch (e) {
+    return handleDbError(res, e, 'Failed to list enrollments');
+  }
+}
+
+async function createStudentEnrollment(req, res) {
+  try {
+    const { student_id, course_section_id } = req.body || {};
+    if (!student_id || !course_section_id) {
+      return fail(res, 'student_id and course_section_id are required', 400);
+    }
+    const v = await validateManualEnrollment(student_id, course_section_id);
+    if (!v.ok) return fail(res, v.message, 400);
+    await attendanceModel.createEnrollmentAdmin(student_id, course_section_id);
+    const rows = await attendanceModel.listEnrollmentsAdmin();
+    const item = rows.find(
+      (r) => Number(r.student_id) === Number(student_id) && Number(r.course_section_id) === Number(course_section_id)
+    );
+    return ok(res, 'Enrollment created', { item: item || {} }, 201);
+  } catch (e) {
+    return handleDbError(res, e, 'Failed to create enrollment');
+  }
+}
+
+async function deleteStudentEnrollment(req, res) {
+  try {
+    const id = Number(req.params.id);
+    await attendanceModel.deleteEnrollment(id);
+    return ok(res, 'Enrollment removed', {});
+  } catch (e) {
+    return handleDbError(res, e, 'Failed to remove enrollment');
+  }
+}
+
+async function listAttendanceSummaryAdmin(req, res) {
+  try {
+    const q = req.query.student_id;
+    const studentId = q !== undefined && q !== '' ? Number(q) : null;
+    const rows = await attendanceModel.listAttendanceSummaryAll(studentId);
+    return ok(res, 'OK', { items: rows });
+  } catch (e) {
+    return handleDbError(res, e, 'Failed to load attendance summary');
+  }
+}
+
 async function updateStudentAffiliation(req, res) {
   try {
     const id = Number(req.params.id);
@@ -591,6 +710,7 @@ async function updateStudentAffiliation(req, res) {
       minor_id: minor_id ?? null,
       specialization_id: specialization_id ?? null,
     });
+    await autoEnrollCoreCourses(id);
     const row = await studentModel.getStudent(id);
     return ok(res, 'Student affiliation updated', { item: row });
   } catch (e) {
@@ -637,4 +757,12 @@ module.exports = {
   deleteCourseSection,
   listStudents,
   updateStudentAffiliation,
+  listFaculty,
+  listFacultyMappings,
+  createFacultyMapping,
+  deleteFacultyMapping,
+  listStudentEnrollments,
+  createStudentEnrollment,
+  deleteStudentEnrollment,
+  listAttendanceSummaryAdmin,
 };

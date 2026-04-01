@@ -54,4 +54,15 @@ router.delete('/course-sections/:id', admin.deleteCourseSection);
 router.get('/students', admin.listStudents);
 router.patch('/students/:id', admin.updateStudentAffiliation);
 
+router.get('/faculty', admin.listFaculty);
+router.get('/faculty-mappings', admin.listFacultyMappings);
+router.post('/faculty-mappings', admin.createFacultyMapping);
+router.delete('/faculty-mappings/:id', admin.deleteFacultyMapping);
+
+router.get('/student-enrollments', admin.listStudentEnrollments);
+router.post('/student-enrollments', admin.createStudentEnrollment);
+router.delete('/student-enrollments/:id', admin.deleteStudentEnrollment);
+
+router.get('/attendance-summary', admin.listAttendanceSummaryAdmin);
+
 module.exports = router;

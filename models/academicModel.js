@@ -20,7 +20,7 @@ async function createUniversity(row) {
 async function updateUniversity(id, row) {
   await run(
     `UPDATE university SET name=?, abbreviation=?, address=?, email=?, phone=?, website=?,
-     updated_at = datetime('now') WHERE id=?`,
+     updated_at = NOW() WHERE id=?`,
     [
       row.name,
       row.abbreviation || null,
@@ -271,11 +271,18 @@ async function getBatchWithProgram(batchId) {
 
 async function listCourseOfferings() {
   return await all(
-    `SELECT co.*, c.course_name, c.course_code, b.joining_year, p.name AS program_name
+    `SELECT co.*, c.course_name, c.course_code, c.course_group_id,
+            b.joining_year, b.id AS batch_id, b.program_id,
+            p.name AS program_name, p.school_id AS school_id,
+            sch.name AS school_name,
+            cg.name AS course_group_name, cg.track AS course_group_track,
+            cg.school_id AS cg_school_id, cg.program_id AS cg_program_id
      FROM course_offering co
      JOIN course c ON c.id = co.course_id
+     JOIN course_group cg ON cg.id = c.course_group_id
      JOIN batch b ON b.id = co.batch_id
      JOIN program p ON p.id = b.program_id
+     JOIN school sch ON sch.id = p.school_id
      ORDER BY co.id DESC`
   );
 }
@@ -306,11 +313,19 @@ async function deleteCourseOffering(id) {
 
 async function listCourseSections() {
   return await all(
-    `SELECT cs.*, c.course_code, b.joining_year
+    `SELECT cs.*, c.course_code, c.course_name, c.course_group_id, c.id AS course_id,
+            b.joining_year, b.id AS batch_id, b.program_id,
+            p.name AS program_name, p.school_id AS school_id,
+            sch.name AS school_name,
+            cg.name AS course_group_name, cg.track AS course_group_track,
+            co.id AS course_offering_id
      FROM course_section cs
      JOIN course_offering co ON co.id = cs.course_offering_id
      JOIN course c ON c.id = co.course_id
+     JOIN course_group cg ON cg.id = c.course_group_id
      JOIN batch b ON b.id = co.batch_id
+     JOIN program p ON p.id = b.program_id
+     JOIN school sch ON sch.id = p.school_id
      ORDER BY cs.id DESC`
   );
 }
@@ -337,6 +352,30 @@ async function updateCourseSection(id, row) {
 
 async function deleteCourseSection(id) {
   await run(`DELETE FROM course_section WHERE id = ?`, [id]);
+}
+
+async function listProgramsBySchool(schoolId) {
+  return await all(`SELECT * FROM program WHERE school_id = ? ORDER BY name`, [schoolId]);
+}
+
+async function listBatchesByProgram(programId) {
+  return await all(`SELECT * FROM batch WHERE program_id = ? ORDER BY joining_year DESC`, [programId]);
+}
+
+async function listCourseGroupsBySchoolAndProgram(schoolId, programId) {
+  if (programId) {
+    return await all(
+      `SELECT * FROM course_group
+       WHERE school_id = ? AND (program_id IS NULL OR program_id = ?)
+       ORDER BY name`,
+      [schoolId, programId]
+    );
+  }
+  return await all(`SELECT * FROM course_group WHERE school_id = ? ORDER BY name`, [schoolId]);
+}
+
+async function listCoursesByCourseGroup(courseGroupId) {
+  return await all(`SELECT * FROM course WHERE course_group_id = ? ORDER BY course_code`, [courseGroupId]);
 }
 
 module.exports = {
@@ -387,4 +426,8 @@ module.exports = {
   createCourseSection,
   updateCourseSection,
   deleteCourseSection,
+  listProgramsBySchool,
+  listBatchesByProgram,
+  listCourseGroupsBySchoolAndProgram,
+  listCoursesByCourseGroup,
 };
