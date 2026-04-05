@@ -40,11 +40,44 @@ async function listEnrolledStudentsForSection(courseSectionId) {
   );
 }
 
+async function getCourseSectionIdForCof(courseOfferingFacultyId) {
+  const row = await get(`SELECT course_section_id FROM course_offering_faculty WHERE id = ?`, [
+    courseOfferingFacultyId,
+  ]);
+  return row ? row.course_section_id : null;
+}
+
+/** Same section + date + start/end must not repeat (any faculty mapping on that section). */
+async function findClassSessionSlotConflict(courseSectionId, sessionDate, startTime, endTime) {
+  if (!courseSectionId) return null;
+  return await get(
+    `SELECT id FROM class_session
+     WHERE course_section_id = ?
+       AND session_date = ?
+       AND start_time = CAST(? AS TIME)
+       AND end_time = CAST(? AS TIME)`,
+    [courseSectionId, sessionDate, startTime, endTime]
+  );
+}
+
+/** Spec: duplicate for same faculty mapping + slot. */
+async function findClassSessionDuplicateForCof(courseOfferingFacultyId, sessionDate, startTime, endTime) {
+  return await get(
+    `SELECT id FROM class_session
+     WHERE course_offering_faculty_id = ?
+       AND session_date = ?
+       AND start_time = CAST(? AS TIME)
+       AND end_time = CAST(? AS TIME)`,
+    [courseOfferingFacultyId, sessionDate, startTime, endTime]
+  );
+}
+
 async function createClassSession({ courseOfferingFacultyId, sessionDate, startTime, endTime, sessionType }) {
   const r = await run(
-    `INSERT INTO class_session (course_offering_faculty_id, session_date, start_time, end_time, session_type)
-     VALUES (?, ?, CAST(? AS TIME), CAST(? AS TIME), ?)`,
-    [courseOfferingFacultyId, sessionDate, startTime, endTime, sessionType]
+    `INSERT INTO class_session (course_offering_faculty_id, course_section_id, session_date, start_time, end_time, session_type)
+     SELECT ?, cof.course_section_id, ?, CAST(? AS TIME), CAST(? AS TIME), ?
+     FROM course_offering_faculty cof WHERE cof.id = ?`,
+    [courseOfferingFacultyId, sessionDate, startTime, endTime, sessionType, courseOfferingFacultyId]
   );
   return r.lastID;
 }
@@ -178,6 +211,9 @@ module.exports = {
   getStudentByEmail,
   listFacultySectionMappings,
   listEnrolledStudentsForSection,
+  getCourseSectionIdForCof,
+  findClassSessionSlotConflict,
+  findClassSessionDuplicateForCof,
   createClassSession,
   listClassSessionsForFacultyMapping,
   getClassSession,

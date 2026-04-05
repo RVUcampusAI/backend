@@ -2,6 +2,8 @@ const express = require('express');
 const { requireAuth } = require('../middleware/authMiddleware');
 const { requireAdmin } = require('../middleware/adminMiddleware');
 const admin = require('../controllers/adminController');
+const exam = require('../controllers/examController');
+const feedback = require('../controllers/feedbackController');
 
 const router = express.Router();
 router.use(requireAuth, requireAdmin);
@@ -64,5 +66,17 @@ router.post('/student-enrollments', admin.createStudentEnrollment);
 router.delete('/student-enrollments/:id', admin.deleteStudentEnrollment);
 
 router.get('/attendance-summary', admin.listAttendanceSummaryAdmin);
+
+router.get('/exams', exam.listExamsAdmin);
+
+router.post('/feedback/questions', feedback.adminCreateQuestion);
+router.get('/feedback/questions', feedback.adminListQuestions);
+router.post('/feedback/templates', feedback.adminCreateTemplate);
+router.get('/feedback/templates', feedback.adminListTemplates);
+router.get('/feedback/templates/:id/questions', feedback.adminGetTemplateQuestions);
+router.put('/feedback/templates/:id/questions', feedback.adminSetTemplateQuestions);
+router.post('/feedback/instances', feedback.adminCreateFormInstance);
+router.get('/feedback/analytics', feedback.adminFeedbackAnalytics);
+router.get('/feedback/responses', feedback.adminFeedbackResponses);
 
 module.exports = router;

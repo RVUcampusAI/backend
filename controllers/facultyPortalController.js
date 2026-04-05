@@ -63,13 +63,45 @@ async function createSession(req, res) {
     );
     if (!allowed) return fail(res, 'Invalid faculty mapping for this session', 403);
 
-    const id = await attendance.createClassSession({
-      courseOfferingFacultyId: course_offering_faculty_id,
-      sessionDate: session_date,
-      startTime: start_time,
-      endTime: end_time,
-      sessionType: st,
-    });
+    const dupCof = await attendance.findClassSessionDuplicateForCof(
+      course_offering_faculty_id,
+      session_date,
+      start_time,
+      end_time
+    );
+    if (dupCof) {
+      return fail(res, 'A class session already exists for this faculty slot (same date and time)', 409);
+    }
+    const sectionId = await attendance.getCourseSectionIdForCof(course_offering_faculty_id);
+    const dupSection = await attendance.findClassSessionSlotConflict(
+      sectionId,
+      session_date,
+      start_time,
+      end_time
+    );
+    if (dupSection) {
+      return fail(
+        res,
+        'This section already has a class session at the same date and time (all faculty share the section calendar)',
+        409
+      );
+    }
+
+    let id;
+    try {
+      id = await attendance.createClassSession({
+        courseOfferingFacultyId: course_offering_faculty_id,
+        sessionDate: session_date,
+        startTime: start_time,
+        endTime: end_time,
+        sessionType: st,
+      });
+    } catch (e) {
+      if (e && e.code === '23505') {
+        return fail(res, 'Duplicate class session violates database constraint', 409);
+      }
+      throw e;
+    }
     const created = await attendance.getClassSession(id);
     return ok(res, 'Session created', { item: created }, 201);
   } catch (e) {
@@ -132,8 +164,8 @@ async function saveAttendance(req, res) {
     if (!fac) return fail(res, 'Faculty profile not found', 404);
     const sessionId = Number(req.body?.class_session_id);
     const rows = req.body?.rows;
-    if (!sessionId || !Array.isArray(rows) || !rows.length) {
-      return fail(res, 'class_session_id and non-empty rows[] required', 400);
+    if (!sessionId || !Array.isArray(rows)) {
+      return fail(res, 'class_session_id and rows[] array required', 400);
     }
     const okOwn = await attendance.assertSessionOwnedByFaculty(sessionId, fac.id);
     if (!okOwn) return fail(res, 'Session not found', 404);
@@ -146,23 +178,33 @@ async function saveAttendance(req, res) {
 
     const enrolled = await attendance.listEnrolledStudentsForSection(sectionId);
     const allowedIds = new Set(enrolled.map((s) => s.id));
+    const byStudent = new Map(rows.map((r) => [Number(r.student_id), r.status]));
 
     for (const r of rows) {
       const sid = Number(r.student_id);
-      const status = r.status;
       if (!allowedIds.has(sid)) {
         return fail(res, `Student ${sid} is not enrolled in this section`, 400);
       }
+      if (!STATUSES.has(r.status)) {
+        return fail(res, 'Each row needs status: present, absent, or leave', 400);
+      }
+    }
+
+    for (const s of enrolled) {
+      const status = byStudent.has(s.id) ? byStudent.get(s.id) : 'absent';
       if (!STATUSES.has(status)) {
         return fail(res, 'Each row needs status: present, absent, or leave', 400);
       }
-      await attendance.upsertAttendance({ studentId: sid, classSessionId: sessionId, status });
+      await attendance.upsertAttendance({ studentId: s.id, classSessionId: sessionId, status });
     }
 
     const items = await attendance.listAttendanceForSession(sessionId);
-    return ok(res, 'Attendance saved', { items });
+    return ok(res, 'Attendance saved', { items, saved_count: enrolled.length });
   } catch (e) {
     console.error(e);
+    if (e && e.code === '23505') {
+      return fail(res, 'Duplicate attendance row (student + session must be unique)', 409);
+    }
     return fail(res, 'Failed to save attendance', 500);
   }
 }
